@@ -1,10 +1,10 @@
-# Uncomment this to pass the first stage
-# import socket
-from socket import socket, create_server
 from dataclasses import dataclass
 from http import HTTPStatus
+import asyncio
 
-RESPONSE_SEP: str = "\r\n"
+RESPONSE_SEP = "\r\n"
+PORT = 4221
+BUFFER_SIZE = 2048
 
 
 @dataclass
@@ -35,7 +35,7 @@ class Response:
             self.content_length = len(self.content)
             self.content_type = "text/plain"
 
-    def return_byte_response(self) -> bytes:
+    async def return_byte_response(self) -> bytes:
         response_string = f"HTTP/1.1 {self.status}{RESPONSE_SEP}"
         if self.content is not None:
             response_string += f"Content-Type: {self.content_type}{RESPONSE_SEP}"
@@ -45,26 +45,24 @@ class Response:
         return response_string.encode()
 
 
-def main():
-    server_socket = create_server(("localhost", 4221), reuse_port=True)
-    print("created server on localhost:4221")
-    connection, ret_add = server_socket.accept()
-    with connection:
-        request = process_connection(connection)
-        print(f"received {request.method} request on {request.path}")
-        response = process_response(request)
-        response_bytes = response.return_byte_response()
-        connection.sendall(response_bytes)
+async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+    request = await process_connection(reader)
+    print(f"received {request.method} request on {request.path}")
+    response = await process_response(request)
+    response_bytes = await response.return_byte_response()
+    writer.write(response_bytes)
+    writer.close()
 
 
-def process_connection(connection: socket) -> Request:
-    request = connection.recv(2048).decode()
+async def process_connection(reader: asyncio.StreamReader) -> Request:
+    request_bytes = await reader.read(BUFFER_SIZE)
+    request = request_bytes.decode()
     start_line, *headers = request.split("\r\n")
     method, path, http_version = start_line.split(" ")
     return Request(method, path, http_version, headers)
 
 
-def process_response(request: Request) -> Response:
+async def process_response(request: Request) -> Response:
     status = HTTPStatus.NOT_FOUND
     content: str | None = None
     match request.path:
@@ -86,5 +84,12 @@ def process_response(request: Request) -> Response:
     return Response(content=content, status=status)
 
 
+async def main():
+    server = await asyncio.start_server(process_client, host="localhost", port=PORT)
+    print(f"created server on localhost:{PORT}")
+    async with server:
+        await server.serve_forever()
+
+
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
