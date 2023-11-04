@@ -1,18 +1,64 @@
 import asyncio
-from pathlib import Path
 import time
 from argparse import ArgumentParser
+from dataclasses import dataclass
 from http import HTTPStatus
-
-from http_types import RESPONSE_SEP, Directory, HTTPRequest, HTTPResponse
+from pathlib import Path
 
 PORT = 4221
 BUFFER_SIZE = 2048
+RESPONSE_SEP = "\r\n"
 
 
 def logger(string: str):
     log_time = time.strftime("%H:%M:%S", time.localtime())
     print(f"{log_time} | {string}")
+
+
+Directory = Path | None
+
+
+@dataclass
+class HTTPResponse:
+    content: str | None = None
+    content_type: str | None = None
+    content_length: int | None = None
+    status: HTTPStatus = HTTPStatus.NOT_FOUND
+
+    def __post_init__(self):
+        if self.content is not None:
+            self.content_length = len(self.content)
+            if self.content_type is None:
+                self.content_type = "text/plain"
+
+    async def return_byte_response(self) -> bytes:
+        response_string = f"HTTP/1.1 {self.status}{RESPONSE_SEP}"
+        if self.content is not None:
+            response_string += f"Content-Type: {self.content_type}{RESPONSE_SEP}"
+            response_string += f"Content-Length: {self.content_length}{RESPONSE_SEP*2}"
+            response_string += f"{self.content}{RESPONSE_SEP}"
+        response_string += f"{RESPONSE_SEP}"
+        return response_string.encode()
+
+
+HTTPHeaders = dict[str, str]
+
+
+@dataclass
+class HTTPRequest:
+    method: str
+    path: str
+    http_version: str
+    headers: list[str]
+
+    async def request_headers(self) -> HTTPHeaders:
+        header_dict: HTTPHeaders = {}
+        for header in self.headers:
+            if header != "":
+                header_type, header_content = header.split(": ")
+                header_dict[header_type.strip()] = header_content.strip()
+
+        return header_dict
 
 
 async def process_response(request: HTTPRequest) -> HTTPResponse:
