@@ -120,8 +120,10 @@ async def main():
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("-d", "--directory", dest="directory")
-
     args = parser.parse_args()
-    directory: Directory = Path(args.directory)
+
+    directory: Directory = None
+    if args.directory:
+        directory = Path(args.directory)
 
     asyncio.run(main())
