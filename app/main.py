@@ -8,7 +8,7 @@ BUFFER_SIZE = 2048
 
 
 @dataclass
-class Request:
+class HTTPRequest:
     method: str
     path: str
     http_version: str
@@ -24,7 +24,7 @@ class Request:
 
 
 @dataclass
-class Response:
+class HTTPResponse:
     content: str | None = None
     content_type: str | None = None
     content_length: int | None = None
@@ -54,15 +54,15 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
     writer.close()
 
 
-async def process_connection(reader: asyncio.StreamReader) -> Request:
+async def process_connection(reader: asyncio.StreamReader) -> HTTPRequest:
     request_bytes = await reader.read(BUFFER_SIZE)
     request = request_bytes.decode()
     start_line, *headers = request.split("\r\n")
     method, path, http_version = start_line.split(" ")
-    return Request(method, path, http_version, headers)
+    return HTTPRequest(method, path, http_version, headers)
 
 
-async def process_response(request: Request) -> Response:
+async def process_response(request: HTTPRequest) -> HTTPResponse:
     status = HTTPStatus.NOT_FOUND
     content: str | None = None
     match request.path:
@@ -81,7 +81,7 @@ async def process_response(request: Request) -> Response:
         case _:
             ...
 
-    return Response(content=content, status=status)
+    return HTTPResponse(content=content, status=status)
 
 
 async def main():
