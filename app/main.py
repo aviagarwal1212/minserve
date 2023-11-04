@@ -1,10 +1,16 @@
 import asyncio
 from dataclasses import dataclass
 from http import HTTPStatus
+import time
 
 RESPONSE_SEP = "\r\n"
 PORT = 4221
 BUFFER_SIZE = 2048
+
+
+def logger(string: str):
+    log_time = time.strftime("%H:%M:%S", time.localtime())
+    print(f"{log_time} {string}")
 
 
 @dataclass
@@ -69,7 +75,7 @@ class HTTPRequest:
 
 async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     request = await process_connection(reader)
-    print(f"received {request.method} request on {request.path}")
+    logger(f"received {request.method} request on {request.path}")
     response = await request.process_response()
     response_bytes = await response.return_byte_response()
     writer.write(response_bytes)
@@ -86,7 +92,7 @@ async def process_connection(reader: asyncio.StreamReader) -> HTTPRequest:
 
 async def main():
     server = await asyncio.start_server(process_client, host="localhost", port=PORT)
-    print(f"created server on localhost:{PORT}")
+    logger(f"created server on localhost:{PORT}")
     async with server:
         await server.serve_forever()
 
