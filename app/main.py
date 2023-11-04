@@ -3,7 +3,6 @@
 from socket import socket, create_server
 from dataclasses import dataclass
 from http import HTTPStatus
-from typing import Tuple
 
 RESPONSE_SEP: str = "\r\n"
 
