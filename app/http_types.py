@@ -1,7 +1,11 @@
 from dataclasses import dataclass
+from pathlib import Path
 from http import HTTPStatus
 
 RESPONSE_SEP = "\r\n"
+
+
+Directory = Path | None
 
 
 @dataclass
@@ -11,10 +15,11 @@ class HTTPResponse:
     content_length: int | None = None
     status: HTTPStatus = HTTPStatus.NOT_FOUND
 
-    async def __post_init__(self):
+    def __post_init__(self):
         if self.content is not None:
             self.content_length = len(self.content)
-            self.content_type = "text/plain"
+            if self.content_type is None:
+                self.content_type = "text/plain"
 
     async def return_byte_response(self) -> bytes:
         response_string = f"HTTP/1.1 {self.status}{RESPONSE_SEP}"
@@ -44,25 +49,3 @@ class HTTPRequest:
                 header_dict[header_type.strip()] = header_content.strip()
 
         return header_dict
-
-    async def process_response(self) -> HTTPResponse:
-        status = HTTPStatus.NOT_FOUND
-        content: str | None = None
-
-        match self.path:
-            case "/":
-                status = HTTPStatus.OK
-
-            case path if path.startswith("/echo/"):
-                status = HTTPStatus.OK
-                content = path.split("/echo/")[1]
-
-            case "/user-agent":
-                status = HTTPStatus.OK
-                headers = await self.request_headers()
-                content = headers["User-Agent"]
-
-            case _:
-                ...
-
-        return HTTPResponse(content=content, status=status)
