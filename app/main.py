@@ -21,7 +21,7 @@ Directory = Path | None
 
 class HTTPContentType(Enum):
     TEXT = "text/plain"
-    APPLICATION_OCTET = "application/octet-stream"
+    OCTET = "application/octet-stream"
 
 
 @dataclass
@@ -36,7 +36,8 @@ class HTTPResponse:
             return len(self.content)
         return None
 
-    async def return_byte_response(self) -> bytes:
+    @property
+    def byte_response(self) -> bytes:
         response_string = f"HTTP/1.1 {self.status}{RESPONSE_SEP}"
         if self.content is not None:
             response_string += f"Content-Type: {self.content_type.value}{RESPONSE_SEP}"
@@ -55,8 +56,10 @@ class HTTPRequest:
     path: str
     http_version: str
     headers: list[str]
+    body: str | None = None
 
-    async def request_headers(self) -> HTTPHeaders:
+    @property
+    def headers_dict(self) -> HTTPHeaders:
         header_dict: HTTPHeaders = {}
         for header in self.headers:
             if header != "":
@@ -76,21 +79,40 @@ async def process_response(request: HTTPRequest) -> HTTPResponse:
             return HTTPResponse(content=content)
 
         case "/user-agent":
-            headers = await request.request_headers()
+            headers = request.headers_dict
             content = headers["User-Agent"]
             return HTTPResponse(content=content)
 
         case path if path.startswith("/files/"):
-            filename = path.split("/files/")[1].strip()
-            if directory is not None:
-                file = directory.joinpath(filename)
-                if file.is_file():
-                    content = file.read_text()
-                    return HTTPResponse(
-                        content=content, content_type=HTTPContentType.APPLICATION_OCTET
-                    )
+            match request.method:
+                case "GET":
+                    filename = path.split("/files/")[1].strip()
+                    if directory is not None:
+                        file = directory.joinpath(filename)
+                        if file.is_file():
+                            content = file.read_text()
+                            return HTTPResponse(
+                                content=content, content_type=HTTPContentType.OCTET
+                            )
 
-            return HTTPResponse(status=HTTPStatus.NOT_FOUND)
+                    return HTTPResponse(status=HTTPStatus.NOT_FOUND)
+
+                case "POST":
+                    filename = path.split("/files/")[1].strip()
+                    if (
+                        filename != ""
+                        and directory is not None
+                        and request.body is not None
+                    ):
+                        file = directory.joinpath(filename)
+                        with file.open("w", encoding="UTF-8") as f:
+                            f.write(request.body)
+                        return HTTPResponse(status=HTTPStatus.CREATED)
+
+                    return HTTPResponse(status=HTTPStatus.NOT_FOUND)
+
+                case _:
+                    return HTTPResponse(status=HTTPStatus.NOT_FOUND)
 
         case _:
             return HTTPResponse(status=HTTPStatus.NOT_FOUND)
@@ -100,16 +122,17 @@ async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWri
     request = await process_connection(reader)
     logger(f"received {request.method} request on {request.path}")
     response = await process_response(request)
-    response_bytes = await response.return_byte_response()
-    writer.write(response_bytes)
+    writer.write(response.byte_response)
     writer.close()
 
 
 async def process_connection(reader: asyncio.StreamReader) -> HTTPRequest:
     request_bytes = await reader.read(BUFFER_SIZE)
     request = request_bytes.decode()
-    start_line, *headers = request.split(RESPONSE_SEP)
+    start_line, *headers, body_object = request.split(RESPONSE_SEP)
     method, path, http_version = start_line.split(" ")
+    if body_object:
+        return HTTPRequest(method, path, http_version, headers, body_object)
     return HTTPRequest(method, path, http_version, headers)
 
 
@@ -122,7 +145,7 @@ async def main():
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("-d", "--directory", dest="directory")
+    parser.add_argument("-d", "--directory", help="the directory to be mounted")
     args = parser.parse_args()
 
     directory: Directory = None
