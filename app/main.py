@@ -2,6 +2,7 @@ import asyncio
 import time
 from argparse import ArgumentParser
 from dataclasses import dataclass
+from enum import Enum
 from http import HTTPStatus
 from pathlib import Path
 
@@ -18,23 +19,27 @@ def logger(string: str):
 Directory = Path | None
 
 
+class HTTPContentType(Enum):
+    TEXT = "text/plain"
+    APPLICATION_OCTET = "application/octet-stream"
+
+
 @dataclass
 class HTTPResponse:
     content: str | None = None
-    content_type: str | None = None
-    content_length: int | None = None
-    status: HTTPStatus = HTTPStatus.NOT_FOUND
+    content_type: HTTPContentType = HTTPContentType.TEXT
+    status: HTTPStatus = HTTPStatus.OK
 
-    def __post_init__(self):
+    @property
+    def content_length(self) -> int | None:
         if self.content is not None:
-            self.content_length = len(self.content)
-            if self.content_type is None:
-                self.content_type = "text/plain"
+            return len(self.content)
+        return None
 
     async def return_byte_response(self) -> bytes:
         response_string = f"HTTP/1.1 {self.status}{RESPONSE_SEP}"
         if self.content is not None:
-            response_string += f"Content-Type: {self.content_type}{RESPONSE_SEP}"
+            response_string += f"Content-Type: {self.content_type.value}{RESPONSE_SEP}"
             response_string += f"Content-Length: {self.content_length}{RESPONSE_SEP*2}"
             response_string += f"{self.content}{RESPONSE_SEP}"
         response_string += f"{RESPONSE_SEP}"
@@ -62,35 +67,33 @@ class HTTPRequest:
 
 
 async def process_response(request: HTTPRequest) -> HTTPResponse:
-    status = HTTPStatus.OK
-    content: str | None = None
-    content_type: str | None = None
-
     match request.path:
         case "/":
-            pass
+            return HTTPResponse()
 
         case path if path.startswith("/echo/"):
             content = path.split("/echo/")[1]
+            return HTTPResponse(content=content)
 
         case "/user-agent":
             headers = await request.request_headers()
             content = headers["User-Agent"]
+            return HTTPResponse(content=content)
 
         case path if path.startswith("/files/"):
-            status = HTTPStatus.NOT_FOUND
             filename = path.split("/files/")[1].strip()
             if directory is not None:
                 file = directory.joinpath(filename)
                 if file.is_file():
-                    status = HTTPStatus.OK
                     content = file.read_text()
-                    content_type = "application/octet-stream"
+                    return HTTPResponse(
+                        content=content, content_type=HTTPContentType.APPLICATION_OCTET
+                    )
+
+            return HTTPResponse(status=HTTPStatus.NOT_FOUND)
 
         case _:
-            status = HTTPStatus.NOT_FOUND
-
-    return HTTPResponse(content=content, status=status, content_type=content_type)
+            return HTTPResponse(status=HTTPStatus.NOT_FOUND)
 
 
 async def process_client(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
