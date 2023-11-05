@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "codecrafters-http-server-python"
+version = "1.00"
+description = ""
+authors = ["Avi Agarwal <aviagarwal1212@gmail.com>"]
+readme = "README.md"
+packages = [{ include = "codecrafters_http_server_python" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pyparsing = "~=3.0"
+lark = "~=1.1"
+
+
+[tool.poetry.group.dev.dependencies]
+ruff-lsp = "^0.0.42"
+black = "^23.10.1"
+isort = "^5.12.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
